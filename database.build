@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+       
+        <Target Name="-BuildDB" DependsOnTargets="-CompiledScript;">	
+				<Microsoft.Sdc.Tasks.Sql.Execute ConnectionString="$(MasterDBconnStr)" Path="%(EDW_DB.TargetDirectory)" />
+				<SqlScriptExecute ConnectionString="$(WorkingDBconnStr_EDW)" Path="%(EDW_DB_DDL.TargetDirectory)"  ContinueOnError="true"/>
+				
+				<Microsoft.Sdc.Tasks.Sql.Execute ConnectionString="$(MasterDBconnStr)" Path="%(DS_DB.TargetDirectory)" />
+				<SqlScriptExecute ConnectionString="$(WorkingDBconnStr_DS)" Path="%(DS_DB_DDL.TargetDirectory)"  ContinueOnError="true"/>
+        </Target>		 
+       
+ 		<Target Name="-DropDB" DependsOnTargets="-CompiledScript">
+				<Microsoft.Sdc.Tasks.Sql.Execute ConnectionString="$(MasterDBconnStr)" Path="%(EDW_DB_KillConnection.TargetDirectory)" />
+				<Microsoft.Sdc.Tasks.Sql.Execute ConnectionString="$(MasterDBconnStr)" Path="%(DS_DB_KillConnection.TargetDirectory)" />
+    			<Microsoft.Sdc.Tasks.Sql.Execute ConnectionString="$(MasterDBconnStr)" Path="%(EDW_DB_DropDB.TargetDirectory)" /> 
+				<Microsoft.Sdc.Tasks.Sql.Execute ConnectionString="$(MasterDBconnStr)" Path="%(DS_DB_DropDB.TargetDirectory)" /> 
+        </Target>
+ 
+        <Target Name="-CompiledScript" DependsOnTargets="InitBuild">
+			  <Copy SourceFiles="@(EDW_DB_DDL_Upgrading)" DestinationFolder="%(TargetDirectory)"> </Copy>
+			  <Copy SourceFiles="@(EDWStaging_DB_DDL_Upgrading)" DestinationFolder="%(TargetDirectory)"> </Copy>
+
+			  <Copy SourceFiles="@(CreateSchemaVersionTable)" DestinationFiles="%(TargetDirectory)"> </Copy>
+			  <Copy SourceFiles="@(LibraryFiles_SDC)" DestinationFiles="%(TargetDirectory)"> </Copy>
+			  <Copy SourceFiles="@(LibraryFiles_Community)" DestinationFiles="%(TargetDirectory)"> </Copy>
+			  <Copy SourceFiles="@(LibraryFiles_Ascmd)" DestinationFiles="%(TargetDirectory)"> </Copy>
+
+			  <Copy SourceFiles="@(BuildFiles_env)" DestinationFiles="%(TargetDirectory)"> </Copy>
+			  <Copy SourceFiles="@(BuildFiles_Deploy)" DestinationFiles="%(TargetDirectory)"> </Copy>
+			  <Copy SourceFiles="@(BuildFiles_Deploy_Cmd)" DestinationFiles="%(TargetDirectory)"> </Copy>
+			  <Copy SourceFiles="@(EDW_DB_Test)" DestinationFolder="%(TargetDirectory)"/>
+        </Target>
+
+        <Target Name="-CompiledFixtureScript" DependsOnTargets="InitBuild">
+				<Copy SourceFiles="@(EDW_DB_KillConnection)" DestinationFiles="%(TargetDirectory)"> </Copy>
+				<FileUpdate Files="%(EDW_DB_KillConnection.TargetDirectory)" Regex="@DatabaseName@" ReplacementText="EDW" />
+				<Copy SourceFiles="@(EDW_DB_DropDB)" DestinationFiles="%(TargetDirectory)"> </Copy>
+				<FileUpdate Files="%(EDW_DB_DropDB.TargetDirectory)" Regex="@DatabaseName@" ReplacementText="EDW" />
+				<Copy SourceFiles="@(EDW_DB)" DestinationFiles="%(TargetDirectory)"> </Copy>
+				<FileUpdate Files="%(EDW_DB.TargetDirectory)" Regex="@localDBFolder@" ReplacementText="$(DBFileLocation)" />
+				<Copy SourceFiles="@(EDW_DB_DDL)" DestinationFiles="%(TargetDirectory)"> </Copy>
+				
+				<Copy SourceFiles="@(DS_DB_KillConnection)" DestinationFiles="%(TargetDirectory)"> </Copy>
+				<FileUpdate Files="%(DS_DB_KillConnection.TargetDirectory)" Regex="@DatabaseName@" ReplacementText="EDW" />
+				<Copy SourceFiles="@(DS_DB_DropDB)" DestinationFiles="%(TargetDirectory)"> </Copy>
+				<FileUpdate Files="%(DS_DB_DropDB.TargetDirectory)" Regex="@DatabaseName@" ReplacementText="EDW" />
+				<Copy SourceFiles="@(DS_DB)" DestinationFiles="%(TargetDirectory)"> </Copy>
+				<FileUpdate Files="%(DS_DB.TargetDirectory)" Regex="@localDBFolder@" ReplacementText="$(DBFileLocation)" />
+				<Copy SourceFiles="@(DS_DB_DDL)" DestinationFiles="%(TargetDirectory)"> </Copy>
+        </Target>
+		
+		
+		<Target Name="-upgradingDB" DependsOnTargets="-CompileUpgradeDBScript">
+			<Message text="$(ReposDir)\Build\database\EDWUpgrading.sql"/>
+			 <Microsoft.Sdc.Tasks.Sql.Execute ConnectionString="$(WorkingDBconnStr_EDW); " Path="$(ReposDir)\Build\database\EDWUpgrading.sql"  CommandTimeout="0"/>
+        </Target>
+ 
+        <Target Name="-CompileUpgradeDBScript" DependsOnTargets="InitBuild;">
+        	 <MakeDir Directories="$(BuildDir)\database\" Condition="!Exists('$(BuildDir)\database\')"/>
+        	 <Exec Command='.\lib\nant\bin\NAnt.exe -buildfile:databaseChange.build generate-script -D:dbConnection="$(WorkingDBconnStr_EDW)" -D:DetaScriptDir="$(ReposDir)\database\EDW Delta" -D:Output="$(ReposDir)\Build\database\EDWUpgrading.sql" -D:Output-undo="$(ReposDir)\Build\database\EDWUpgradingundo.sql"'/>
+        </Target> 
+        <!--  -BuildDB;-RestoreDB; -CompileUpgradeDBScript;-upgradingDB;-CompileUpgradeDBScript;-upgradingDB-->
+        <Target Name="localDB" DependsOnTargets="Aslocal;ShowParameters;FixtureArtifacts;-CompiledFixtureScript;-DropDB;-BuildDB;-CompileUpgradeDBScript;-upgradingDB"/>
+         
+</Project>
+

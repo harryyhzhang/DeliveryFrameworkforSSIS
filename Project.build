@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="3.5" DefaultTargets="build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" >
+
+  <UsingTask AssemblyFile="$(MSBuildProjectDirectory)\lib\SDCTasks.v2.1.3155.0\Microsoft.Sdc.Tasks.dll" TaskName="Microsoft.Sdc.Tasks.Folder.CleanFolder"/>
+  <UsingTask AssemblyFile="$(MSBuildProjectDirectory)\lib\SDCTasks.v2.1.3155.0\Microsoft.Sdc.Tasks.dll" TaskName="Microsoft.Sdc.Tasks.Sql.Execute"/>
+  <UsingTask AssemblyFile="$(MSBuildProjectDirectory)\lib\MSBuild.Community.Tasks.v1.2.0.306\MSBuild.Community.Tasks.dll" TaskName="Zip" />
+  <UsingTask AssemblyFile="$(MSBuildProjectDirectory)\lib\MSBuild.Community.Tasks.v1.2.0.306\MSBuild.Community.Tasks.dll" TaskName="FileUpdate" />
+  <UsingTask AssemblyFile="$(MSBuildProjectDirectory)\lib\MSBuild.Community.Tasks.v1.2.0.306\MSBuild.Community.Tasks.dll" TaskName="NUnit" /> 
+  <UsingTask AssemblyFile="$(MSBuildProjectDirectory)\lib\MSBuild.Community.Tasks.v1.2.0.306\MSBuild.Community.Tasks.dll" TaskName="ExecuteDDL" />
+  <UsingTask AssemblyFile="$(MSBuildProjectDirectory)\lib\MSBuild.Community.Tasks.v1.2.0.306\MSBuild.Community.Tasks.dll" TaskName="XmlUpdate" />
+  <UsingTask AssemblyFile="$(MSBuildProjectDirectory)\lib\MSBuild.Community.Tasks.v1.2.0.306\MSBuild.Community.Tasks.dll" TaskName="RegexReplace" />
+  <UsingTask AssemblyFile="$(MSBuildProjectDirectory)\lib\dbdeploy.net\MSBuild.Dbdeploy.Task.dll" TaskName="MSBuild.Dbdeploy.Task.Dbdeploy"/>
+ 
+  <UsingTask AssemblyFile="$(MSBuildProjectDirectory)\lib\Msbuild.dll" TaskName="SqlScriptExecute" />
+  <!--UsingTask AssemblyFile="C:\workspace\b\src\Msbuild\bin\Debug\Msbuild.dll" TaskName="SqlScriptExecute" /-->
+  
+  <Import Project="env.build"/>
+  <Import Project="database.build"/>
+  <Import Project="$(MSBuildProjectDirectory)\lib\SDCTasks.v2.1.3155.0\Microsoft.Sdc.Common.tasks"/>
+   
+  <Target Name="Build" DependsOnTargets="InitBuild;-CompiledScript;-CompileCube;"/> 
+
+  <Target Name="AssembleForLocal" DependsOnTargets="localDB;FixtureArtifacts;-CompiledScript;-CompileUpgradeDBScript;-CompileETL;"/>
+     
+  <Target Name="TestETLLocal" DependsOnTargets="localDB;AssembleForLocal;-DBLogicTest">
+      <Exec Command='"%programfiles(x86)%"\"Microsoft SQL Server"\110\DTS\Binn\DTexec.exe  /Project $(SSISDir)\bin\Development\ETL.ispac /Package Main.dtsx >> $(BuildDir)\ETLMainlog.txt" '/>
+      <!--Exec Command='"%programfiles(x86)%"\"Microsoft SQL Server"\110\DTS\Binn\DTexec.exe  /isserver "\SSISDB\EDW\TMI\TMI_EDW_MBC.dtsx" /Server "."'/-->
+      <!--Exec Command='$(ReposDir)\lib\Ascmd.exe -S $(ServerName) -i $(BuildDir)\TMIMart.xmla'/-->
+      <CallTarget Targets="-DBLogicTestAssert"/>
+  </Target>
+  
+  <Target Name="-DBLogicTest">
+     <Microsoft.Sdc.Tasks.Sql.Execute ConnectionString="$(WorkingDBconnStr_DS)" Path="$(ReposDir)\test\Testcase1.init.edw.sql" CommandTimeout=''/> 
+  </Target>
+
+   <Target Name="-DBLogicTestAssert" DependsOnTargets="InitBuild;Local;">
+		<Microsoft.Sdc.Tasks.Sql.Execute ConnectionString="$(WorkingDBconnStr_EDW)" Path="$(ReposDir)\test\Testcase1.Assert.edw.sql" CommandTimeout=''/> 
+   </Target>
+
+<Target Name="AsLocal"  Outputs="%(ItemGroup.Identity)" DependsOnTargets="InitBuild;Local;-ConfigETL"/> 
+ 
+
+<Target Name="-ConfigETL" DependsOnTargets="InitBuild">
+			<ItemGroup>
+				<conmgr Include= "$(SSISDir)\DS.conmgr">
+				  <NewConnStr>DTS:ConnectionString=&quot;$(WorkingDBconnStr_DS);Provider=SQLNCLI11.1;Auto Translate=False;&quot;</NewConnStr>
+				</conmgr>  
+				<conmgr Include= "$(SSISDir)\DW.conmgr">
+				  <NewConnStr>DTS:ConnectionString=&quot;$(WorkingDBconnStr_EDW);Provider=SQLNCLI11.1;Auto Translate=False;&quot;</NewConnStr>
+				</conmgr>
+			</ItemGroup>
+			<FileUpdate  Files="%(conmgr.identity)" Regex="DTS:ConnectionString=&quot;\w.*&quot;" ReplacementText="%(conmgr.NewConnStr)" />
+</Target>  
+
+
+<Target Name="-CompileETL" DependsOnTargets="InitBuild">
+	<Exec Command='"%programfiles(x86)%\Microsoft Visual Studio 11.0\Common7\IDE\devenv.exe"  $(SSISDir)\ETL.dtproj /ReBuild Development /Project ETL '/>
+    <Copy SourceFiles="$(SSISDir)\bin\Development\ETL.ispac" DestinationFiles="$(BuildDir)\ETL.ispac"> </Copy>
+</Target>  
+
+
+</Project>
